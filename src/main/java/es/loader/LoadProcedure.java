@@ -14,7 +14,7 @@ public interface LoadProcedure<T> {
     /**
      * 出发数据装载操作
      */
-    boolean execute(List<T> data) throws IOException;
+    boolean execute(List<T> data) throws Exception;
 
     /**
      * 关闭client
@@ -22,6 +22,6 @@ public interface LoadProcedure<T> {
      */
     boolean close() throws IOException;
 
-    void createIndex() throws IOException;
+    void createIndex() throws Exception;
 
 }

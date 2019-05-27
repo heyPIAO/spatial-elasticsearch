@@ -9,7 +9,6 @@
     <version>1.0-SNAPSHOT</version>
     <description>Add spatial feature for Elasticsearch cluster and publish it with http apis, for spatial query and Web Map Services, you know</description>
 
-
     <properties>
         <java.version>12</java.version>
         <scala.version>2.11</scala.version>
@@ -83,6 +82,7 @@
         <dependency>
             <groupId>org.elasticsearch</groupId>
             <artifactId>elasticsearch-analysis-ik</artifactId>
+            <version>6.1.1</version>
         </dependency>
 
         <dependency>
