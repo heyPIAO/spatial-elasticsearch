@@ -5,47 +5,55 @@ import es.exception.LoaderException;
 import es.model.BaseEntity;
 import es.util.FileUtils;
 import es.util.StringUtil;
-import org.apache.http.HttpHost;
+import lombok.Getter;
+import lombok.Setter;
 import org.elasticsearch.action.DocWriteResponse;
-import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.action.index.IndexResponse;
-import org.elasticsearch.client.RequestOptions;
-import org.elasticsearch.client.RestClient;
-import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.client.indices.CreateIndexRequest;
-import org.elasticsearch.client.indices.CreateIndexResponse;
-import org.elasticsearch.client.indices.GetIndexRequest;
+import org.elasticsearch.client.IndicesAdminClient;
+import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static es.common.config.ESConfig.HOST_NAME;
-import static es.common.config.ESConfig.HTTP_PORT;
+import static es.common.config.ESConfig.*;
 
 
 /**
  * 数据装载类的基类
  */
+@Getter
+@Setter
 public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
+
+    private static final Logger logger = LoggerFactory.getLogger(Loader.class);
 
 
     // TODO 改成全局单例
-    RestHighLevelClient client;
-    String indexName;
-    boolean isOpen = false;
-    String fileName;
+    private TransportClient client;
+    private String indexName;
+    private boolean isOpen = false;
+    private String fileName;
 
     /**
      * 配置索引名称
@@ -61,55 +69,65 @@ public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
         return this;
     }
 
-    public boolean createIndex() throws Exception {
+    public boolean createIndex() {
         if (this.indexExist()) {
             System.out.println("Index Already Exists");
             return true;
         }
-        CreateIndexRequest request = new CreateIndexRequest(this.indexName);
-        request.settings(Settings.builder()
-          .put("index.number_of_shards", 1)
-          .put("index.number_of_replicas", 0)
-        );
-        Class <T> entityClass = getTClass();
-        request.mapping(T.toESMap(entityClass.getName()));
-        CreateIndexResponse response = client.indices().create(request, RequestOptions.DEFAULT);
+        IndicesAdminClient indicesAdminClient = client.admin().indices();
+        CreateIndexResponse response = indicesAdminClient.prepareCreate(this.indexName)
+          .setSettings(Settings.builder()
+            .put("index.number_of_shards", 1)
+            .put("index.number_of_replicas", 0)).get();
         if (!response.isAcknowledged()) {
             throw new LoaderException("Create index fail");
+        }
+        // 用put接口实现mapping设置
+        PutMappingResponse putResponse = indicesAdminClient.preparePutMapping(this.indexName)
+          .setType(this.indexName)
+          .setSource(getT().toESMapStr(getTClass().getName())).get();
+        if(!putResponse.isAcknowledged()){
+            throw new LoaderException("Put mapping to index" + this.indexName + " failed");
         }
         return true;
     }
 
-    private boolean indexExist() throws IOException {
-        GetIndexRequest request = new GetIndexRequest(this.indexName);
-        return this.client.indices().exists(request, RequestOptions.DEFAULT);
+    private boolean indexExist() {
+        IndicesAdminClient indicesAdminClient = client.admin().indices();
+        IndicesExistsResponse response = indicesAdminClient.prepareExists(this.indexName).get();
+        return response.isExists();
     }
 
 
-    public void load(List<T> data) throws Exception {
+    public void load(List<T> data) {
         for(T t: data) {
-            IndexRequest request = new IndexRequest(this.indexName);
-            request.id(t.getId());
             String json = t.toJson();
-            request.source(json, XContentType.JSON);
-            IndexResponse response = client.index(request, RequestOptions.DEFAULT);
+            IndexResponse response = client.prepareIndex(this.indexName, this.getTClass().getSimpleName(), t.getId())
+              .setSource(json, XContentType.JSON).get();
             if (!response.getResult().equals(DocWriteResponse.Result.CREATED)) {
                 throw new LoaderException(response.getResult().toString());
             }
         }
     }
 
-    public void bulkLoad(List<T> data) throws Exception {
+    public void bulkLoad(List<T> data) {
         // todo
     }
 
 
     public boolean open() {
-        this.client = new RestHighLevelClient(RestClient.builder(
-          new HttpHost(HOST_NAME, HTTP_PORT, "http"),
-          new HttpHost(HOST_NAME, 9201, "http")));
-        this.isOpen = true;
-        return true;
+        Settings settings = Settings.builder()
+          .put("cluster.name", "es").build();
+        try {
+            this.client = new PreBuiltTransportClient(settings)
+              .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(HOST_NAME), TRANSPORT_PORT))
+              .addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(HOST_NAME_2), TRANSPORT_PORT));
+            this.isOpen = true;
+            return true;
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+            throw new LoaderException("Unvalid host name with [" + HOST_NAME + "," + HOST_NAME_2 + "]");
+        }
     }
 
     /**
@@ -126,7 +144,7 @@ public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
         return true;
     }
 
-    public boolean close() throws IOException {
+    public boolean close() {
         if (!this.isOpen) {
             // todo 写一个 warning
             return true;
@@ -165,6 +183,10 @@ public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
                 List<Field> fields = this.getFields();
                 for(Field field:fields) {
                     int i = heads.indexOf(StringUtil.unCamelCase(field.getName()));
+                    if(i < 0){
+                        logger.error("No value for field " + field.getName());
+                        continue;
+                    }
                     if (values[i]==null || values[i].trim().length()==0) continue;
                     field.setAccessible(true);
                     if(field.getGenericType().getTypeName().equals("int")||field.getGenericType().getTypeName().equals("Integer")){
@@ -216,10 +238,41 @@ public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
         return this.prepareData(filename, 100, 0);
     }
 
+    /**
+     * 获取泛型 T 的真实类
+     * @return
+     */
     private Class<T> getTClass() {
         return (Class <T>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
     }
 
+    /**
+     * 获取泛型 T 实例
+     * @return
+     */
+    private T getT() {
+        Class<T> c = this.getTClass();
+        try {
+            Constructor<T> con = c.getConstructor();
+            T t = con.newInstance();
+            return t;
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+            throw new LoaderException("No no argument construction for class " + this.getTClass().getName());
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * 迭代获取泛型 T 所有字段（包括父类所有字段）
+     * @return
+     */
     private List<Field> getFields(){
         List<Field> fields = new ArrayList<>();
         Class <T> c = getTClass();

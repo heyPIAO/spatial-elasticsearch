@@ -16,23 +16,23 @@ public interface LoadProcedure<T> {
      */
     boolean open();
 
-    boolean createIndex() throws Exception;
+    boolean createIndex();
 
 
     void load(List<T> data) throws Exception;
 
-    void bulkLoad(List<T> data) throws Exception;
+    void bulkLoad(List<T> data);
 
     /**
      * 触发数据装载操作
      */
-    boolean execute() throws Exception;
+    boolean execute() throws Exception ;
 
     /**
      * 关闭client
      * @return
      */
-    boolean close() throws IOException;
+    boolean close();
 
 
 }

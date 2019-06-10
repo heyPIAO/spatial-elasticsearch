@@ -24,11 +24,22 @@ public class BaseEntity {
         return gson.toJson(this);
     }
 
-    public static Map<String, Object> toESMap(String className) throws ClassNotFoundException {
+    public String toESMapStr(String clazz) {
+        Map<String, Object> map = this.toESMap(clazz);
+        Gson gson = new Gson();
+        return gson.toJson(map);
+    }
+
+    public Map<String, Object> toESMap(String className) {
         Map<String, Object> properties = new HashMap<>();
-        Class c = Class.forName(className);
+        Class c;
+        try {
+            c = Class.forName(className);
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            throw new LoaderException("No valid class " + className);
+        }
         List<Field> fields = new ArrayList<>();
-        if(c==null) throw new LoaderException("No valid class " + className);
         while(c!=null){
             fields.addAll(Arrays.asList(c.getDeclaredFields()));
             c = c.getSuperclass();
