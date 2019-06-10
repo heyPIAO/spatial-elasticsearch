@@ -11,8 +11,7 @@ import lombok.Setter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 @Getter
 @Setter
@@ -25,11 +24,15 @@ public class BaseEntity {
         return gson.toJson(this);
     }
 
-
     public static Map<String, Object> toESMap(String className) throws ClassNotFoundException {
         Map<String, Object> properties = new HashMap<>();
         Class c = Class.forName(className);
-        Field[] fields = c.getDeclaredFields();
+        List<Field> fields = new ArrayList<>();
+        if(c==null) throw new LoaderException("No valid class " + className);
+        while(c!=null){
+            fields.addAll(Arrays.asList(c.getDeclaredFields()));
+            c = c.getSuperclass();
+        }
         for (Field field : fields) {
             // todo 反射获取annotation，若有范围类型，则设置范围
             String fieldType = field.getGenericType().getTypeName();

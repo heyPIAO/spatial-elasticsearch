@@ -26,6 +26,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -154,46 +155,40 @@ public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
      */
     private List<T> prepareData(String filename, int size, int offsize) throws Exception {
         List<String> data = FileUtils.readByLine(filename, size, true);
-        Class <T> c = getTClass();
-        Constructor<?> con = c.getConstructor();
+        Constructor<?> con = getTClass().getConstructor();
         // todo 默认文件有头
         List<String> heads = Arrays.asList(FileUtils.readByLine(filename, 1, false).get(0).split(","));
         List<T> ts = data.stream().map((x)->{
             try {
                 Object obj = con.newInstance();
                 String[] values = x.split(",");
-                Field[] fields = getTClass().getDeclaredFields();
-                for(Field field:fields){
+                List<Field> fields = this.getFields();
+                for(Field field:fields) {
                     int i = heads.indexOf(StringUtil.unCamelCase(field.getName()));
+                    if (values[i]==null || values[i].trim().length()==0) continue;
                     field.setAccessible(true);
-                    switch (field.getGenericType().getTypeName()){
-                        case "int":
-                            if (values[i]!=null && values[i].trim().length()>0)
-                                field.set(obj, Integer.valueOf(values[i]));
-                            break;
-                        case "java.lang.String":
-                            // 对于空间字段，因为es中的空间字段表达不是标准wkt，因此需要特殊处理
-                            Geometry geoAnno = field.getAnnotation(Geometry.class);
-                            if(geoAnno != null){
-                                WKTReader reader = new WKTReader();
-                                org.locationtech.jts.geom.Geometry geometry = reader.read(values[i]);
-                                switch (geoAnno.type()){
-                                    case POINT:
-                                        Point point = (Point)geometry;
-                                        field.set(obj, point.getY() + "," + point.getX());
-                                        break;
-                                    default:
-                                        throw new LoaderException("Unsupport shape field type");
-                                }
-                            } else {
-                                field.set(obj, values[i]);
+                    if(field.getGenericType().getTypeName().equals("int")||field.getGenericType().getTypeName().equals("Integer")){
+                        field.set(obj, Integer.valueOf(values[i]));
+                    } else if(field.getGenericType().getTypeName().equals("java.lang.String")){
+                        Geometry geoAnno = field.getAnnotation(Geometry.class);
+                        if(geoAnno != null){
+                            WKTReader reader = new WKTReader();
+                            org.locationtech.jts.geom.Geometry geometry = reader.read(values[i]);
+                            switch (geoAnno.type()){
+                                case POINT:
+                                    Point point = (Point)geometry;
+                                    field.set(obj, point.getY() + "," + point.getX());
+                                    continue;
+                                default:
+                                    throw new LoaderException("Unsupport shape field type");
                             }
-                            break;
-                        case "float":
-                            if (values[i]!=null && values[i].trim().length()>0)
-                                field.set(obj, Float.valueOf(values[i]));
-                            break;
-                        default: throw new LoaderException("Unsupported Field Type for Data Model");
+                        } else {
+                            field.set(obj, values[i]);
+                        }
+                    } else if(field.getGenericType().getTypeName().equals("float")||field.getGenericType().getTypeName().equals("Float")){
+                        field.set(obj, Float.valueOf(values[i]));
+                    } else {
+                        throw new LoaderException("Unsupported Field Type for Data Model");
                     }
                 }
                 return (T)obj;
@@ -223,6 +218,17 @@ public class Loader<T extends BaseEntity> implements LoadProcedure<T> {
 
     private Class<T> getTClass() {
         return (Class <T>) ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
+    }
+
+    private List<Field> getFields(){
+        List<Field> fields = new ArrayList<>();
+        Class <T> c = getTClass();
+        // 迭代获取类及父类中的所有字段
+        while(c!=null){
+            fields.addAll(Arrays.asList(c.getDeclaredFields()));
+            c = (Class <T>)c.getSuperclass();
+        }
+        return fields;
     }
 
 }
