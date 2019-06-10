@@ -7,7 +7,7 @@ import lombok.Setter;
 @Setter
 public class ESConfig {
 
-    public static String HOST_NAME = "10.183.69.7";
+    public static String HOST_NAME = "nn01";
     public static int TRANSPORT_PORT = 9300;
     public static int HTTP_PORT = 9200;
 

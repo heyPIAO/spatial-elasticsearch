@@ -36,33 +36,20 @@ public class BaseEntity {
             String fieldName = field.getName();
             Map<String, String> fieldMap = new HashMap<>();
             // 基于字段类型设置字段mapping
-            switch (fieldType) {
-                case "int":
-                    fieldMap.put("type", "integer");
-                    properties.put(fieldName, fieldMap);
-                    break;
-                case "float":
-                    fieldMap.put("type", "float");
-                    properties.put(fieldName, fieldMap);
-                    break;
-                case "double":
-                    fieldMap.put("type", "double");
-                    properties.put(fieldName, fieldMap);
-                    break;
-                case "java.lang.String":
-                    fieldMap.put("type", "text");
-                    properties.put(fieldName, fieldMap);
-                    break;
-                case "java.util.Date":
-                    fieldMap.put("type", "date");
-                    properties.put(fieldName, fieldMap);
-                    break;
-                case "boolean":
-                    fieldMap.put("type", "boolean");
-                    properties.put(fieldName, fieldMap);
-                    break;
-                default:
-                    throw new LoaderException("Unsupported Field Type");
+            if(fieldType.equals("int") || fieldType.equals("java.lang.Integer")){
+                fieldMap.put("type", "integer");
+            } else if(fieldType.equals("float") || fieldType.equals("java.lang.Float")){
+                fieldMap.put("type", "float");
+            } else if(fieldType.equals("double") || fieldType.equals("java.lang.Double")){
+                fieldMap.put("type", "double");
+            } else if(fieldType.equals("java.lang.String")){
+                fieldMap.put("type", "text");
+            } else if(fieldType.equals("java.util.Data")){
+                fieldMap.put("type", "date");
+            } else if(fieldType.equals("boolean") || fieldType.equals("java.lang.Boolean")){
+                fieldMap.put("type", "boolean");
+            } else {
+                throw new LoaderException("Unsupported Field Type");
             }
 
             // 基于标签设置字段mapping
@@ -70,6 +57,7 @@ public class BaseEntity {
             for(Annotation annotation:annotations) {
                 if(annotation.annotationType().getName().equals(Chinese.class.getName())) {
                     fieldMap.put("analyzer", "ik_max_word");
+                    fieldMap.put("search_analyzer", "ik_max_word");
                 } else if (annotation.annotationType().getName().equals(Geometry.class.getName())) {
                     Geometry geoAnno = (Geometry) annotation;
                     switch (geoAnno.type()) {
@@ -85,6 +73,7 @@ public class BaseEntity {
                 }
             }
 
+            properties.put(fieldName, fieldMap);
         }
         Map<String, Object> mapping = new HashMap<>();
         mapping.put("properties", properties);
