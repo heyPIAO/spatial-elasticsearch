@@ -71,7 +71,7 @@ public class BaseEntity {
             for(Annotation annotation:annotations) {
                 if(annotation.annotationType().getName().equals(Chinese.class.getName())) {
                     fieldMap.put("analyzer", "ik_max_word");
-                    fieldMap.put("search_analyzer", "ik_max_word");
+                    fieldMap.put("search_analyzer", "ik_smart");
                 } else if (annotation.annotationType().getName().equals(Geometry.class.getName())) {
                     Geometry geoAnno = (Geometry) annotation;
                     switch (geoAnno.type()) {
