@@ -7,7 +7,6 @@ import java.lang.reflect.Field;
 public class HelloES {
 
     public static void main(String[] args) throws Exception {
-
         POI poi = new POI();
         System.out.println(poi.getClass().getName());
         Class c = Class.forName(poi.getClass().getName());
@@ -19,7 +18,6 @@ public class HelloES {
                 System.out.println(annotation.annotationType().getName().endsWith(Chinese.class.getName()));
             }
         }
-
     }
 
 
